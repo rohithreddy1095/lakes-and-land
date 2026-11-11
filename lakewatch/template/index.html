@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lake encroachment watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+Telugu:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<style>
+:root{
+  --bg:#0d1416; --surface:#141d20; --surface-2:#1b262a; --fg:#e4ecea; --muted:#90a4a1; --line:#283639;
+  --accent:#4fc8e8; --accent-ink:#06222b; --cell-empty:#1f2a2d; --gain:#4fc8e8; --flat:#6f8582;
+  --img-ref:#ffc94d; --img-now:#5ce1ff; --img-lost:#ff4d2e; --img-lost2:#ffaa2b; --img-farm:#e0359e; --img-weeds:#4caf50;
+  --display:"Barlow Condensed","Noto Sans Telugu","Arial Narrow",sans-serif; --body:"Barlow","Noto Sans Telugu",system-ui,sans-serif; --mono:"IBM Plex Mono","Noto Sans Telugu",ui-monospace,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --bg:#eef2f0; --surface:#ffffff; --surface-2:#e3eae7; --fg:#132120; --muted:#55696a; --line:#cfd9d6;
+  --accent:#0b7d9e; --accent-ink:#ffffff; --cell-empty:#e3e9e7; --gain:#0b7d9e; --flat:#8a9c99; color-scheme:light}}
+:root[data-theme="light"]{
+  --bg:#eef2f0; --surface:#ffffff; --surface-2:#e3eae7; --fg:#132120; --muted:#55696a; --line:#cfd9d6;
+  --accent:#0b7d9e; --accent-ink:#ffffff; --cell-empty:#e3e9e7; --gain:#0b7d9e; --flat:#8a9c99; color-scheme:light}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5}
+img{max-width:100%}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:.005em}
+h1{font-size:clamp(22px,3vw,30px);font-weight:600;line-height:1.05;color:var(--muted)}
+h2{font-size:clamp(24px,3.4vw,32px);font-weight:600;line-height:1.1}
+h3{font-size:20px;font-weight:600}
+p{margin:0}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+header.top{padding-block:22px 16px;display:grid;gap:10px}
+.toprow{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.lang{display:flex;gap:4px}
+.headline{font:700 clamp(32px,5.6vw,60px)/1.02 var(--display);text-wrap:balance;max-width:22ch}
+.headline b{color:var(--img-lost);font-weight:700}
+.headline b.f{color:var(--img-farm)} .headline b.g{color:var(--gain)}
+:root[lang="te"] .headline{line-height:1.25;font-size:clamp(26px,4.4vw,46px)}
+:root[lang="te"] h2{line-height:1.3}
+header.top .sub{color:var(--muted);max-width:66ch}
+section{padding-block:32px}
+section+section{border-top:1px solid var(--line)}
+.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 18px;margin-bottom:16px}
+.sec-head p{color:var(--muted);max-width:62ch}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,1fr);gap:18px;align-items:start}
+#map{height:min(78vh,760px);min-height:440px;border-radius:6px;border:1px solid var(--line);background:var(--surface-2);overflow:hidden}
+.leaflet-container{font-family:var(--body);background:var(--surface-2)}
+.leaflet-control-attribution{font-size:10px;background:rgba(10,16,18,.72)!important;color:#c9d6d3!important}
+.leaflet-control-attribution a{color:#c9d6d3!important}
+.leaflet-bar a{background:var(--surface);color:var(--fg);border-color:var(--line)}
+.leaflet-bar a:hover{background:var(--surface-2);color:var(--fg)}
+.pin{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#101a1d;color:#fff;border:2px solid var(--img-lost);font:600 13px/1 var(--mono);box-shadow:0 1px 4px rgba(0,0,0,.5);cursor:pointer}
+.rail{display:grid;gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px}
+.panel h4{margin:0 0 8px;font:600 11.5px/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{appearance:none;border:1px solid var(--line);background:var(--surface-2);color:var(--fg);font:500 13px/1.1 var(--mono);padding:7px 9px;border-radius:4px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.chip:focus-visible,.tog:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.base-note{margin-top:8px;font-size:12.5px;color:var(--muted);min-height:1.5em}
+.togs{display:grid;gap:4px}
+.tog{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:8px;padding:6px;border-radius:4px;cursor:pointer;border:0;background:none;color:var(--fg);text-align:left;font:500 14px/1.3 var(--body)}
+.tog:hover{background:var(--surface-2)}
+.tog .sw{width:22px;height:14px;border-radius:2px}
+.tog .sw.line{height:0;border-top:3px solid}
+.tog .v{font:500 12.5px/1 var(--mono);color:var(--muted);white-space:nowrap}
+.tog[aria-pressed="false"]{opacity:.45}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:16px 14px}
+.kpi{display:grid;gap:2px;min-width:0}
+.kpi b{font:600 clamp(28px,3.4vw,42px)/1 var(--display)}
+.kpi span{font-size:12.5px;color:var(--muted);line-height:1.35}
+.kpi.lost b{color:var(--img-lost)} .kpi.farm b{color:var(--img-farm)}
+.bul{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;align-items:start}
+.msg{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--img-lost);border-radius:6px;padding:16px;display:grid;gap:12px}
+.msg .hd{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font:500 12px/1.3 var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.row{display:grid;grid-template-columns:minmax(84px,auto) 1fr;gap:12px;padding:9px 0;border-top:1px solid var(--line);align-items:baseline}
+.row b{font:600 24px/1 var(--display);white-space:nowrap}
+.row span{font-size:14px}
+.row small{display:block;color:var(--muted);font-size:12.5px}
+.row.watch b{color:var(--img-lost2)} .row.open b{color:var(--img-lost)} .row.crop b{color:var(--img-farm)}
+svg text{font-family:var(--mono);font-size:10.5px;fill:var(--muted)}
+#radar,#chart,#tankmap{width:100%;display:block}
+#radar .ln{fill:none;stroke:var(--accent);stroke-width:1.6}
+.grid{stroke:var(--line);stroke-width:1}
+#radar .end{fill:var(--accent)} #radar .endt{fill:var(--fg);font-size:11.5px}
+.tm{display:grid;grid-template-columns:minmax(220px,360px) minmax(0,1fr);gap:22px;align-items:start}
+.frame{position:relative;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:#000;max-width:100%}
+.frame img,.frame svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.frame .tag{position:absolute;left:8px;top:8px;background:rgba(8,12,14,.78);color:#fff;padding:5px 8px;border-radius:3px;font:500 12px/1.25 var(--mono)}
+.oref{fill:none;stroke:var(--img-ref);stroke-width:2;stroke-dasharray:6 4}
+.onow{fill:rgba(92,225,255,.16);stroke:var(--img-now);stroke-width:1.6;fill-rule:evenodd}
+.al-old{fill:rgba(255,77,46,.28);stroke:none;fill-rule:evenodd}
+.al-new{fill:rgba(255,77,46,.55);stroke:#fff;stroke-width:1.4;fill-rule:evenodd}
+.tm-side{display:grid;gap:14px;min-width:0}
+.tm-read{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 26px}
+.tm-year{font:700 64px/0.9 var(--display);font-variant-numeric:tabular-nums}
+.tm-stat b{display:block;font:600 26px/1 var(--display)}
+.tm-stat span{font-size:12.5px;color:var(--muted)}
+.tm-ctl{display:flex;align-items:center;gap:12px}
+.play{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--fg);width:40px;height:40px;border-radius:50%;cursor:pointer;display:grid;place-items:center;flex:none}
+.play svg{width:16px;height:16px;fill:currentColor}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.chart-wrap{position:relative;min-width:0}
+#chart{overflow:visible}
+#chart .bar{fill:var(--accent);opacity:.55;cursor:pointer}
+#chart .bar.sel{opacity:1}
+#chart .ref{stroke:var(--img-ref);stroke-dasharray:5 4;stroke-width:1.5}
+#chart .rain{fill:none;stroke:var(--muted);stroke-width:1.2}
+#chart .ann{fill:var(--fg);font-size:11px}
+#chart .adot{fill:var(--img-lost)}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font:500 12px/1.35 var(--mono);white-space:nowrap;transform:translate(-50%,-110%);box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.legend-row{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
+.legend-row i{display:inline-block;width:16px;height:0;border-top:2px solid;vertical-align:middle;margin-right:6px}
+.legend-row i.d{width:9px;height:9px;border:0;border-radius:50%;background:var(--img-lost)}
+.feed{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;display:grid;gap:8px;min-height:86px}
+.feed h4{margin:0;font:600 11.5px/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.al{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;font-size:14px;padding-top:6px;border-top:1px solid var(--line)}
+.al b{font:600 18px/1 var(--display)}
+.al .ll{font:500 12px/1 var(--mono);color:var(--muted)}
+.st{font:600 11.5px/1 var(--body);padding:4px 7px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.st.dry{color:var(--img-lost)} .st.farm{color:var(--img-farm)} .st.back{color:var(--flat)}
+.score{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:13.5px;color:var(--muted)}
+.score b{color:var(--fg);font:600 20px/1 var(--display);margin-right:5px}
+.hs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.hs{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden;display:flex;flex-direction:column;scroll-margin-top:16px;transition:box-shadow .3s}
+.hs.flash{box-shadow:0 0 0 2px var(--img-lost)}
+.hs-h{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:12px 14px 10px;align-items:center}
+.hs-h .pin{cursor:default}
+.hs-h .nums{grid-column:1/-1;font:500 13px/1.4 var(--mono);color:var(--muted)}
+.hs-h .nums .l{color:var(--img-lost)} .hs-h .nums .f{color:var(--img-farm)}
+.photo{aspect-ratio:1;background:#000;z-index:0}
+.yrs{display:flex;gap:4px;padding:10px 14px 0;flex-wrap:wrap}
+.yrs .chip{padding:6px 7px;font-size:12px}
+.rec{padding:12px 14px 14px;display:grid;gap:6px}
+.cells{display:grid;gap:2px}
+.cells i{display:block;aspect-ratio:1/1.6;border-radius:1px;background:var(--cell-empty)}
+.cells i.na{background:repeating-linear-gradient(135deg,var(--cell-empty) 0 2px,transparent 2px 4px)}
+.cells i.cut{box-shadow:-2px 0 0 var(--fg)}
+.rec .axis{display:flex;justify-content:space-between;font:500 10.5px/1 var(--mono);color:var(--muted)}
+.rec .say{font-size:13.5px}
+.cell-key{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.cell-key .ramp{width:90px;height:8px;border-radius:2px;background:linear-gradient(90deg,var(--cell-empty),var(--accent))}
+.two{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:26px;align-items:center}
+.swipe{position:relative;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:#000;user-select:none;touch-action:pan-y;max-width:100%}
+.swipe img,.swipe svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.swipe .top{position:absolute;inset:0}
+.swipe .bar-h{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.35);pointer-events:none}
+.swipe .knob{position:absolute;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:#fff;color:#111;display:grid;place-items:center;font:600 14px/1 var(--mono);pointer-events:none;box-shadow:0 1px 6px rgba(0,0,0,.45)}
+.swipe input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;margin:0}
+.swipe .lab{position:absolute;top:8px;background:rgba(8,12,14,.8);color:#fff;padding:4px 8px;border-radius:3px;font:500 12px/1.2 var(--mono);pointer-events:none}
+.swipe .lab.l{left:8px} .swipe .lab.r{right:8px}
+.versus{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:520px}
+.versus div{display:grid;gap:2px;padding-left:12px;border-left:3px solid var(--line)}
+.versus .yr{font:600 22px/1 var(--display);color:var(--muted)}
+.versus b{font:700 44px/1 var(--display)}
+.versus span{font-size:13px;color:var(--muted)}
+.tanks{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:22px;align-items:start}
+#tankmap{background:var(--surface);border:1px solid var(--line);border-radius:6px}
+#tankmap .loss{fill:var(--img-lost);fill-opacity:.8} #tankmap .gain{fill:var(--gain);fill-opacity:.6} #tankmap .flat{fill:var(--flat);fill-opacity:.6}
+#tankmap .me{stroke:var(--fg);stroke-width:1.5}
+#tankmap .lbl{fill:var(--fg);font-size:11.5px}
+.trow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 66px;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.trow .nm{overflow-wrap:anywhere}
+.trow .nm small{display:block;color:var(--muted);font:500 12px/1.3 var(--mono)}
+.trow .dv{position:relative;height:12px}
+.trow .dv::before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line)}
+.trow .dv i{position:absolute;top:0;bottom:0;border-radius:2px}
+.trow .ch{font:500 13px/1 var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.trow.me .nm{font-weight:600}
+.more{justify-self:start;margin-top:10px}
+details{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+summary{cursor:pointer;font:600 15px/1.3 var(--body)}
+.meth{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px 28px;margin-top:12px;font-size:13.5px}
+.meth h5{margin:0 0 4px;font:600 11.5px/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.meth ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.meth a{color:var(--accent)}
+footer{padding-block:20px 40px;color:var(--muted);font-size:12.5px}
+footer a{color:var(--muted)}
+@media (max-width:900px){
+  .hero,.tm,.bul,.tanks,.two{grid-template-columns:1fr}
+  #map{height:64vh;min-height:360px}
+  .tm .frame{max-width:360px;justify-self:center;width:100%}
+  .tm-year{font-size:52px}
+  .two .swipe{max-width:380px;justify-self:center;width:100%}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="toprow">
+      <span class="eyebrow" data-i18n="eyebrow"></span>
+      <div class="lang" role="group" aria-label="Language"><button class="chip" id="lgEn" aria-pressed="true">English</button><button class="chip" id="lgTe" aria-pressed="false">తెలుగు</button></div>
+    </div>
+    <h1 id="title"></h1>
+    <p class="headline" id="headline"></p>
+    <p class="sub" id="sub"></p>
+  </header>
+
+  <section style="padding-top:6px">
+    <div class="hero">
+      <div id="map" role="region" aria-label="Map of the lake"></div>
+      <aside class="rail">
+        <div class="panel"><h4 data-i18n="kpiH"></h4><div class="kpis" id="kpis"></div></div>
+        <div class="panel"><h4 data-i18n="imgH"></h4><div class="chips" id="baseChips"></div><div class="base-note" id="baseNote"></div></div>
+        <div class="panel"><h4 data-i18n="lyrH"></h4><div class="togs" id="togs"></div></div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="bulletin">
+    <div class="sec-head"><h2 data-i18n="bulH"></h2><p data-i18n="bulP"></p></div>
+    <div class="bul">
+      <div class="msg"><div class="hd"><span id="bulTag"></span><span id="bulDate"></span></div><div id="bulRows"></div></div>
+      <div class="panel" id="radarPanel" style="display:grid;gap:8px">
+        <h4 data-i18n="radH"></h4>
+        <svg id="radar" role="img" aria-label="Radar water area"></svg>
+        <p class="muted" style="font-size:13px" id="radP"></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="years">
+    <div class="sec-head"><h2 id="tmH"></h2><p data-i18n="tmP"></p></div>
+    <div class="tm">
+      <div class="frame" id="tmFrame">
+        <img id="tmImg" alt="">
+        <svg id="tmSvg" preserveAspectRatio="none"><path id="tmCur" class="onow"/><path id="tmRef" class="oref"/><path id="tmOld" class="al-old"/><path id="tmNew" class="al-new"/></svg>
+        <span class="tag" id="tmTag"></span>
+      </div>
+      <div class="tm-side">
+        <div class="tm-read">
+          <div class="tm-year" id="tmYear"></div>
+          <div class="tm-stat"><b class="mono" id="tmHa">–</b><span data-i18n="tmPeak"></span></div>
+          <div class="tm-stat" id="tmRainBox"><b class="mono" id="tmRain">–</b><span id="tmRainL"></span></div>
+        </div>
+        <div class="tm-ctl">
+          <button class="play" id="play" aria-label="Play"><svg viewBox="0 0 16 16"><path id="playIcon" d="M4 2l10 6-10 6z"/></svg></button>
+          <input type="range" id="tmRange" min="0" max="1" value="0" aria-label="Year">
+        </div>
+        <div class="chart-wrap" id="chartWrap"><svg id="chart" role="img" aria-label="Lake area at peak, alerts and rain by year"></svg><div class="tip" id="tip" hidden></div></div>
+        <div class="legend-row"><span><i style="border-color:var(--accent);border-top-width:8px"></i><span id="lgPeak"></span></span><span><i class="d"></i><span data-i18n="lgAlert"></span></span><span id="lgRainBox"><i style="border-color:var(--muted)"></i><span id="lgRain"></span></span><span><i style="border-color:var(--img-ref);border-top-style:dashed"></i><span id="lgRef"></span></span></div>
+        <div class="feed" id="feed"></div>
+        <div class="score" id="score"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="where">
+    <div class="sec-head"><h2 data-i18n="hsH"></h2><p data-i18n="hsP"></p></div>
+    <div class="hs-grid" id="hsGrid"></div>
+    <div class="cell-key" style="margin-top:12px"><span data-i18n="kDry"></span><span class="ramp"></span><span data-i18n="kWet"></span><span style="margin-left:14px" id="kCut"></span></div>
+  </section>
+
+  <section id="compare">
+    <div class="two">
+      <div class="swipe" id="swPeak"></div>
+      <div style="display:grid;gap:16px">
+        <h2 id="cmH"></h2>
+        <div class="versus" id="versus"></div>
+        <p class="muted" id="cmP"></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="tanks">
+    <div class="sec-head"><h2 id="tkH"></h2><p id="tkP"></p></div>
+    <div class="tanks">
+      <svg id="tankmap" role="img" aria-label="Neighbouring tanks, coloured by change"></svg>
+      <div><div id="tlist"></div><button class="chip more" id="tMore"></button></div>
+    </div>
+  </section>
+
+  <section id="method">
+    <details><summary data-i18n="mSum"></summary><div class="meth" id="meth"></div></details>
+  </section>
+  <footer id="foot"></footer>
+</div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="data.js"></script>
+<script>
+(function(){
+const D=window.LAKE_DATA;
+if(!D){document.body.insertAdjacentHTML('afterbegin','<p style="padding:24px">data.js is missing next to this page.</p>');return}
+const $=s=>document.querySelector(s), M=D.meta, NS='http://www.w3.org/2000/svg';
+const el=(t,a={},p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const HA=M.units==='ha', K=HA?1:2.47105;
+const num=v=>{const x=v*K;return (Math.abs(x)<10&&x!==0?x.toFixed(1):Math.round(x).toLocaleString('en-IN'))};
+const MON={en:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],te:['జన','ఫిబ్ర','మార్చి','ఏప్రి','మే','జూన్','జూలై','ఆగ','సెప్టెం','అక్టో','నవం','డిసెం']};
+const DIR={en:{N:'North shore',NE:'North-east shore',E:'East shore',SE:'South-east shore',S:'South shore',SW:'South-west shore',W:'West shore',NW:'North-west shore'},
+           te:{N:'ఉత్తర ఒడ్డు',NE:'ఈశాన్య ఒడ్డు',E:'తూర్పు ఒడ్డు',SE:'ఆగ్నేయ ఒడ్డు',S:'దక్షిణ ఒడ్డు',SW:'నైరుతి ఒడ్డు',W:'పడమటి ఒడ్డు',NW:'వాయువ్య ఒడ్డు'}};
+const refL=M.ref[0]+'–'+String(M.ref[1]).slice(2), nowL=M.now[0]+'–'+String(M.now[1]).slice(2);
+const I={en:{
+ eyebrow:'Lakes & Land · satellite encroachment watch', title:'{name} · encroachment watch',
+ hl_lost:'<b>{lost} {U}</b> of this lake no longer fill.', hl_farm:' <b class="f">{farm} {U}</b> of that is now farmed.',
+ hl_gain:'This lake is not shrinking. It fills <b class="g">{gain} {U}</b> more than in {ref}.', hl_same:'No lasting loss found. The lake fills about as much as in {ref}.',
+ sub:'{n} satellite images from {a} to {b}. Lake at {lat}, {lon}.',
+ U:HA?'hectares':'acres', u:HA?'ha':'ac',
+ kpiH:'Water at peak', k1:'filled most years, {ref}', k2:'fills most years now', k3:'no longer fills normally', k4:'of that is now farmed', k5:'new water since {ref}',
+ imgH:'Photo', lyrH:'Layers', l_ref:'{ref} shoreline', l_now:'Shoreline now', l_never:'Not flooded since {y}', l_wet:'Floods only in the wettest years', l_farm:'Farmed inside {ref} shoreline', l_weed:'Weeds, reeds, shrubs',
+ baseS2:'Sentinel-2 · 10 m', baseHi:'High-resolution photo', online:'needs internet',
+ bulH:'This month’s alert', bulP:'What the system would send the local office today.', bulTag:'Alert bulletin · {m}', bulDate:'Latest image {d}',
+ b1:'open water now', b1r:'Radar, {d}. Full lake in {ref}: {full} {U}.', b1o:'Clear image of {d}. Full lake in {ref}: {full} {U}.',
+ b2:'still not filling', b2s:'{never} {U} dry since {y}, {wet} {U} flood only in the wettest years.',
+ b3:'under crop inside the old shoreline', b3s:'Clear image of {d}.', b4:'to watch', b4s:'Dry now, under water at this time in each of the last {n} years. Largest patch {p} {U} at {ll}.', b4n:'Nothing newly dry this month.',
+ radH:'Radar sees through cloud', radP:'Open water from Sentinel-1 radar since {d}, in {U}. Optical satellites lose most of the rainy season to cloud.',
+ tmH:'Replay: every year since {y}', tmP:'Each frame is the lake at its fullest that year. Red marks the alerts a three-dry-years rule would have raised.',
+ tmPeak:'water at peak', tmRainL:'rain {m}', lgPeak:'Peak water, {U}', lgAlert:'Alert raised', lgRain:'Rain {m}, mm', lgRef:'Full lake, {ref}',
+ feedH:'Alerts raised in {y}', feedNone:'No alert this year.', st_dry:'Still dry today', st_farm:'Farmed today', st_back:'Water came back', shore:'Shoreline',
+ score:'<span><b>{n}</b>alerts since {y}</span><span><b>{c}</b>now farmed or still dry</span><span><b>{b}</b>water came back</span>',
+ hsH:'Where the water went', hsP:'Red is lakebed that has not flooded in recent years. Each square under a map is one year: blue means water covered it at peak.',
+ kDry:'dry', kWet:'flooded', kCut:'▏ = end of {ref}', hsNums:'<b class="l">{l} {u}</b> lost · <b class="f">{f} {u}</b> farmed · {w} {u} weeds',
+ hsSay:'Flooded <b>{a} of {b}</b> years up to {y} · <b>{c} of {d}</b> since', cellNa:'no clear image', cellV:'{p}% under water at peak',
+ cm1:'More rain, smaller lake', cm2:'Then and now', cmRain:'{r} mm rain, {m}', cmP1:'{b} was wetter than {a}, yet the lake peaked {d} {U} smaller. Drag the image to compare.', cmP2:'The fullest year of {ref} against {b}. Drag the image to compare.',
+ tkH:'Every water body within {k} km', tkP:'{n} water bodies, {ref} against {now}. Together: {a} → {b} {U}. {s} shrank by over 10%, {g} grew.',
+ tkMore:'Show all {n}', tkLess:'Show fewer', tkNear:'near {v}', tkLoss:'Lost water', tkGain:'Gained', tkFlat:'About the same', thisLake:'This lake',
+ mSum:'Method, limits and sources', foot:'Generated {d} by lakewatch {v}. Imagery: Landsat (USGS/NASA), Sentinel-1 and Sentinel-2 (ESA Copernicus), Esri World Imagery Wayback.'
+},te:{
+ eyebrow:'చెరువులు & భూములు · ఉపగ్రహ ఆక్రమణ నిఘా', title:'{name} · ఆక్రమణ నిఘా',
+ hl_lost:'ఈ చెరువులో <b>{lost} {U}</b> ఇప్పుడు నిండడం లేదు.', hl_farm:' అందులో <b class="f">{farm} {U}</b> సాగులో ఉన్నాయి.',
+ hl_gain:'ఈ చెరువు తగ్గడం లేదు. {ref} కంటే <b class="g">{gain} {U}</b> ఎక్కువగా నిండుతోంది.', hl_same:'శాశ్వత నష్టం కనబడలేదు. చెరువు {ref}లో లాగే నిండుతోంది.',
+ sub:'{a} నుండి {b} వరకు {n} ఉపగ్రహ చిత్రాలు. చెరువు స్థానం {lat}, {lon}.',
+ U:HA?'హెక్టార్లు':'ఎకరాలు', u:HA?'హె.':'ఎ.',
+ kpiH:'గరిష్ఠ నీటి విస్తీర్ణం', k1:'{ref}లో దాదాపు ప్రతి ఏడాది నిండేది', k2:'ఇప్పుడు దాదాపు ప్రతి ఏడాది నిండుతోంది', k3:'ఇప్పుడు సాధారణంగా నిండడం లేదు', k4:'అందులో సాగులో ఉన్నది', k5:'{ref} తర్వాత కొత్తగా నీరు',
+ imgH:'ఫోటో', lyrH:'పొరలు', l_ref:'{ref} ఒడ్డు', l_now:'ఇప్పటి ఒడ్డు', l_never:'{y} నుండి నీరు రాలేదు', l_wet:'బాగా వర్షాలు పడిన ఏళ్లలో మాత్రమే మునుగుతుంది', l_farm:'{ref} ఒడ్డు లోపల సాగు', l_weed:'కలుపు, తుంగ, పొదలు',
+ baseS2:'Sentinel-2 · 10 మీ.', baseHi:'స్పష్టమైన ఫోటో', online:'ఇంటర్నెట్ అవసరం',
+ bulH:'ఈ నెల హెచ్చరిక', bulP:'ఈ రోజు స్థానిక కార్యాలయానికి వ్యవస్థ పంపే సమాచారం.', bulTag:'హెచ్చరిక బులెటిన్ · {m}', bulDate:'తాజా చిత్రం {d}',
+ b1:'ప్రస్తుతం నీరు', b1r:'రాడార్, {d}. {ref}లో పూర్తి చెరువు: {full} {U}.', b1o:'{d} నాటి స్పష్టమైన చిత్రం. {ref}లో పూర్తి చెరువు: {full} {U}.',
+ b2:'ఇంకా నిండడం లేదు', b2s:'{never} {U} {y} నుండి పొడిగా ఉన్నాయి; {wet} {U} బాగా వర్షాలు పడిన ఏళ్లలో మాత్రమే మునుగుతాయి.',
+ b3:'పాత ఒడ్డు లోపల పంట', b3s:'{d} నాటి స్పష్టమైన చిత్రం.', b4:'గమనించాలి', b4s:'ఇప్పుడు పొడిగా ఉంది; గత {n} ఏళ్లలో ఈ సమయానికి నీటిలో ఉండేది. పెద్ద భాగం {p} {U}, {ll} వద్ద.', b4n:'ఈ నెల కొత్తగా ఎండిన భాగం లేదు.',
+ radH:'మబ్బుల గుండా రాడార్ చూస్తుంది', radP:'{d} నుండి Sentinel-1 రాడార్ ద్వారా నీటి విస్తీర్ణం, {U}. వర్షాకాలంలో సాధారణ ఉపగ్రహాలకు మబ్బులు అడ్డు.',
+ tmH:'{y} నుండి ప్రతి సంవత్సరం', tmP:'ప్రతి చిత్రం ఆ ఏడాది చెరువు అత్యధికంగా నిండిన రోజుది. వరుసగా మూడేళ్లు పొడిగా ఉంటే వచ్చే హెచ్చరికలు ఎరుపు రంగులో.',
+ tmPeak:'గరిష్ఠ నీరు', tmRainL:'{m} వర్షం', lgPeak:'గరిష్ఠ నీరు, {U}', lgAlert:'హెచ్చరిక', lgRain:'{m} వర్షం, మి.మీ.', lgRef:'{ref} పూర్తి చెరువు',
+ feedH:'{y}లో వచ్చిన హెచ్చరికలు', feedNone:'ఈ ఏడాది హెచ్చరిక లేదు.', st_dry:'ఇప్పటికీ పొడిగా ఉంది', st_farm:'ఇప్పుడు సాగులో ఉంది', st_back:'నీరు తిరిగి వచ్చింది', shore:'ఒడ్డు',
+ score:'<span><b>{n}</b>హెచ్చరికలు, {y} నుండి</span><span><b>{c}</b>ఇప్పుడు సాగులో లేదా పొడిగా</span><span><b>{b}</b>నీరు తిరిగి వచ్చింది</span>',
+ hsH:'నీరు ఎక్కడ తగ్గింది', hsP:'ఎరుపు: ఇటీవలి ఏళ్లలో నీరు రాని చెరువు భూమి. పటం కింద ప్రతి గడి ఒక సంవత్సరం: నీలం అంటే ఆ ఏడాది నీరు వచ్చింది.',
+ kDry:'పొడి', kWet:'నీరు', kCut:'▏ = {ref} ముగింపు', hsNums:'<b class="l">{l} {u}</b> తగ్గింది · <b class="f">{f} {u}</b> సాగు · {w} {u} కలుపు',
+ hsSay:'{y} వరకు <b>{b}లో {a}</b> ఏళ్లు నీరు వచ్చింది · తర్వాత <b>{d}లో {c}</b>', cellNa:'స్పష్టమైన చిత్రం లేదు', cellV:'{p}% నీటిలో',
+ cm1:'వర్షం ఎక్కువ, చెరువు చిన్నది', cm2:'అప్పుడు, ఇప్పుడు', cmRain:'{m} వర్షం {r} మి.మీ.', cmP1:'{a} కంటే {b}లో వర్షం ఎక్కువ. అయినా చెరువు {d} {U} తక్కువగా నిండింది. చిత్రాన్ని లాగి పోల్చండి.', cmP2:'{ref}లో అత్యధికంగా నిండిన ఏడాది, {b}తో పోలిక. చిత్రాన్ని లాగి పోల్చండి.',
+ tkH:'{k} కి.మీ. పరిధిలోని అన్ని చెరువులు', tkP:'{n} చెరువులు, {ref}తో {now} పోలిక. మొత్తం: {a} → {b} {U}. {s} చెరువులు 10% పైగా తగ్గాయి, {g} పెరిగాయి.',
+ tkMore:'మొత్తం {n} చూపు', tkLess:'తక్కువ చూపు', tkNear:'{v} దగ్గర', tkLoss:'నీరు తగ్గింది', tkGain:'పెరిగింది', tkFlat:'దాదాపు అంతే', thisLake:'ఈ చెరువు',
+ mSum:'పద్ధతి, పరిమితులు, ఆధారాలు (ఆంగ్లంలో)', foot:'{d}న lakewatch {v} ద్వారా తయారైంది. చిత్రాలు: Landsat (USGS/NASA), Sentinel-1, Sentinel-2 (ESA Copernicus), Esri World Imagery Wayback.'
+}};
+let lang='en'; try{const s=localStorage.getItem('lake-lang');if(s==='te'||s==='en')lang=s}catch(e){}
+const t=(k,v)=>{let s=(I[lang][k]??I.en[k]??k);const all=Object.assign({U:I[lang].U,u:I[lang].u,ref:refL,now:nowL},v||{});for(const x in all)s=s.split('{'+x+'}').join(all[x]);return s};
+const nice=d=>{const [y,m,dd]=d.split('-');return +dd+' '+MON[lang][+m-1]+' '+y};
+const months=a=>MON[lang][a[0]-1]+'–'+MON[lang][a[a.length-1]-1];
+const renders=[];
+function applyLang(){document.documentElement.lang=lang;document.querySelectorAll('[data-i18n]').forEach(e=>{e.innerHTML=t(e.dataset.i18n)});
+  $('#lgEn').setAttribute('aria-pressed',lang==='en');$('#lgTe').setAttribute('aria-pressed',lang==='te');renders.forEach(f=>f())}
+function setLang(l){lang=l;try{localStorage.setItem('lake-lang',l)}catch(e){}applyLang()}
+$('#lgEn').onclick=()=>setLang('en');$('#lgTe').onclick=()=>setLang('te');
+document.title=M.name+' · encroachment watch';
+const A=D.ha, sinceY=M.now[0];
+const hsName=h=>h?DIR[lang][h.dir]+(h.n>1?' '+h.n:''):t('shore');
+const cv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* ---------- base imagery shared by the main map and hotspot maps ---------- */
+const BASES=[];
+if(D.base)BASES.push({key:'s2',label:D.base.date.slice(0,4)+' · S2',date:D.base.date,kind:'s2'});
+(function(){const seen={};(D.hires||[]).forEach(h=>{const y=h.date.slice(0,4);seen[y]=(seen[y]||0)+1});
+  const used={};(D.hires||[]).forEach(h=>{const y=h.date.slice(0,4);BASES.push({key:'w'+h.rn,label:seen[y]>1?h.date.slice(0,7):y,date:h.date,kind:'hi',rn:h.rn,src:h.src,res:h.res})})})();
+BASES.sort((a,b)=>a.date<b.date?-1:1);
+function addBase(map){
+  map.createPane('s2').style.zIndex=150;   // below the tile pane, so photos cover it once they load
+  const pane=map.getPane('s2');
+  if(D.base)L.imageOverlay(D.base.img,D.base.bounds,{pane:'s2'}).addTo(map); let hi=null;
+  return key=>{const b=BASES.find(x=>x.key===key); if(hi){map.removeLayer(hi);hi=null} pane.style.display='';
+    if(b&&b.kind==='hi'){let bad=false;hi=L.tileLayer(D.tiles.replace('{rn}',b.rn),{maxNativeZoom:17,maxZoom:19,minZoom:10});
+      hi.on('tileerror',()=>{bad=true;pane.style.display=''});hi.on('load',()=>{if(!bad)pane.style.display='none'});hi.addTo(map)}
+    return b}}
+const defBase=()=>{const h=BASES.filter(b=>b.kind==='hi');return (h.length?h[h.length-1]:BASES[BASES.length-1]||{}).key};
+const gj=(g,style)=>L.geoJSON({type:'Feature',geometry:g},{style:()=>Object.assign({interactive:false},style),interactive:false});
+
+function buildTop(){
+  renders.push(()=>{
+    $('#title').textContent=t('title',{name:M.name});
+    const big=A.lost>=Math.max(1,0.03*A.full_ref);
+    $('#headline').innerHTML=big?t('hl_lost',{lost:num(A.lost)})+(A.farmed_lost>=0.05*A.lost?t('hl_farm',{farm:num(A.farmed_lost)}):''):
+      (A.gained>0.05*A.full_ref?t('hl_gain',{gain:num(A.gained)}):t('hl_same'));
+    $('#sub').textContent=t('sub',{n:M.n_scenes,a:M.first,b:M.generated.slice(0,4),lat:M.lat.toFixed(4),lon:M.lon.toFixed(4)});
+    const k=[['',A.full_ref,'k1'],['',A.still,'k2'],['lost',A.lost,'k3'],['farm',A.farmed_lost,'k4']];
+    if(A.gained>0.05*A.full_ref)k.push(['',A.gained,'k5']);
+    $('#kpis').innerHTML=k.map(([c,v,key])=>`<div class="kpi ${c}"><b class="mono">${num(v)}</b><span>${t('U')} · ${t(key)}</span></div>`).join('');
+    $('#foot').innerHTML=t('foot',{d:nice(M.generated),v:M.version});
+  });
+}
+
+function buildMap(){
+  const B=L.latLngBounds(D.view), map=L.map('map',{zoomSnap:.25,minZoom:11,maxZoom:19,maxBounds:B.pad(.6)});
+  map.attributionControl.setPrefix(false).addAttribution('Sentinel-2 © ESA Copernicus · Photos © Esri, Maxar');
+  map.fitBounds(B);
+  const pick=addBase(map); let cur=defBase();
+  const chips=$('#baseChips');
+  const note=()=>{const b=BASES.find(x=>x.key===cur);$('#baseNote').textContent=b?nice(b.date)+' · '+(b.kind==='hi'?(b.src||t('baseHi'))+(b.res?' · '+b.res+' m':'')+' · '+t('online'):t('baseS2')):''};
+  BASES.forEach(b=>{const c=document.createElement('button');c.className='chip';c.textContent=b.label;c.setAttribute('aria-pressed',b.key===cur);
+    c.onclick=()=>{cur=b.key;pick(cur);chips.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===c));note()};chips.appendChild(c)});
+  pick(cur);
+  const Ly=D.layers, layers=[
+    {k:'l_ref',sw:'line',col:'--img-ref',v:A.full_ref,on:true,lyr:gj(Ly.full_ref,{color:cv('--img-ref'),weight:2.2,fill:false})},
+    {k:'l_now',sw:'line',col:'--img-now',v:A.still,on:true,lyr:gj(Ly.still,{color:cv('--img-now'),weight:1.8,fill:false})},
+    {k:'l_never',sw:'box',col:'--img-lost',v:A.never,on:true,lyr:gj(Ly.never,{color:cv('--img-lost'),weight:0,fillOpacity:.75})},
+    {k:'l_wet',sw:'box',col:'--img-lost2',v:A.wettest,on:true,lyr:gj(Ly.wettest,{color:cv('--img-lost2'),weight:0,fillOpacity:.65})},
+    {k:'l_farm',sw:'box',col:'--img-farm',v:A.farmed_total,on:false,lyr:gj(Ly.farmed,{color:cv('--img-farm'),weight:0,fillOpacity:.75})},
+    {k:'l_weed',sw:'box',col:'--img-weeds',v:null,on:false,lyr:gj(Ly.weeds,{color:cv('--img-weeds'),weight:0,fillOpacity:.7})}];
+  [2,3,4,5,0,1].forEach(i=>{if(layers[i].on)layers[i].lyr.addTo(map)});
+  D.hotspots.forEach((h,i)=>{L.marker([h.lat,h.lon],{icon:L.divIcon({className:'',html:`<div class="pin">${i+1}</div>`,iconSize:[26,26],iconAnchor:[13,13]})})
+    .addTo(map).on('click',()=>{const c=document.getElementById('hs-'+h.key);c.scrollIntoView({behavior:'smooth',block:'start'});c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),1600)})});
+  renders.push(()=>{note();const tg=$('#togs');tg.innerHTML='';
+    layers.forEach(o=>{const b=document.createElement('button');b.className='tog';b.setAttribute('aria-pressed',o.on);
+      b.innerHTML=`<span class="sw ${o.sw==='line'?'line':''}" style="${o.sw==='box'?'background:var('+o.col+')':'border-color:var('+o.col+')'}"></span><span>${t(o.k,{y:sinceY})}</span><span class="v">${o.v!=null?num(o.v)+' '+t('u'):''}</span>`;
+      b.onclick=()=>{o.on=!o.on;o.on?o.lyr.addTo(map):map.removeLayer(o.lyr);b.setAttribute('aria-pressed',o.on)};tg.appendChild(b)})});
+}
+
+function buildBulletin(){
+  const B=D.bulletin,R=D.radar||[],last=R[R.length-1];
+  if(!B&&!last){$('#bulletin').hidden=true;return}
+  if(R.length<4)$('#radarPanel').hidden=true;
+  renders.push(()=>{
+    const d=last?last.d:B.date, mm=M.generated.split('-');
+    $('#bulTag').textContent=t('bulTag',{m:MON[lang][+mm[1]-1]+' '+mm[0]});$('#bulDate').textContent=t('bulDate',{d:nice(d)});
+    const rows=[['',last?last.ha:B.water,'b1',t(last?'b1r':'b1o',{d:nice(d),full:num(A.full_ref)})],
+      ['open',A.lost,'b2',t('b2s',{never:num(A.never),wet:num(A.wettest),y:sinceY})]];
+    if(B){rows.push(['crop',B.crop,'b3',t('b3s',{d:nice(B.date)})]);
+      const p=B.patches&&B.patches[0];rows.push(['watch',B.watch,'b4',p?t('b4s',{n:B.years,p:num(p[0]),ll:p[1].toFixed(4)+', '+p[2].toFixed(4)}):t('b4n')])}
+    $('#bulRows').innerHTML=rows.map(([c,v,k,s])=>`<div class="row ${c}"><b class="mono">${num(v)} ${t('u')}</b><span>${t(k)}<small>${s}</small></span></div>`).join('');
+    if(R.length<4)return;
+    $('#radP').textContent=t('radP',{d:nice(R[0].d)});
+    const svg=$('#radar'),W=460,H=150,m={l:38,r:48,t:10,b:20};svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.innerHTML='';
+    const vs=R.map(r=>r.ha*K),lo=Math.min(...vs),hi=Math.max(...vs),pad=Math.max(1,(hi-lo)*.15),y0=Math.max(0,lo-pad),y1=hi+pad;
+    const t0=Date.parse(R[0].d),t1=Date.parse(last.d),x=d=>m.l+(Date.parse(d)-t0)/Math.max(1,t1-t0)*(W-m.l-m.r),y=v=>m.t+(H-m.t-m.b)*(1-(v-y0)/(y1-y0));
+    [y0+(y1-y0)*.2,y0+(y1-y0)*.8].forEach(v=>{el('line',{x1:m.l,x2:W-m.r,y1:y(v),y2:y(v),class:'grid'},svg);el('text',{x:m.l-4,y:y(v)+3.5,'text-anchor':'end'},svg).textContent=Math.round(v)});
+    el('path',{d:'M'+R.map(r=>x(r.d)+','+y(r.ha*K)).join('L'),class:'ln'},svg);
+    el('circle',{cx:x(last.d),cy:y(last.ha*K),r:4,class:'end'},svg);el('text',{x:x(last.d)+7,y:y(last.ha*K)+4,class:'endt'},svg).textContent=num(last.ha);
+    for(let yr=+R[0].d.slice(0,4)+1;yr<=+last.d.slice(0,4);yr++)el('text',{x:x(yr+'-01-01'),y:H-5,'text-anchor':'middle'},svg).textContent=yr;
+  });
+}
+
+function buildTM(){
+  const F=D.frames,rain=D.rain,AL=D.alerts,hasRain=Object.keys(rain).length>3;
+  $('#tmFrame').style.aspectRatio=D.fw+'/'+D.fh;
+  $('#tmSvg').setAttribute('viewBox',`0 0 ${D.fw} ${D.fh}`);$('#tmRef').setAttribute('d',D.ref_path);
+  if(!hasRain){$('#tmRainBox').hidden=true;$('#lgRainBox').hidden=true}
+  const rng=$('#tmRange');rng.max=F.length-1;
+  const sens={TM:'Landsat 4/5 · 30 m','ETM+':'Landsat 7 · 30 m',OLI:'Landsat 8/9 · 30 m'};
+  const byY={};AL.forEach(a=>byY[a.y]=(byY[a.y]||0)+a.ha);
+  const hs=k=>D.hotspots.find(h=>h.key===k);
+  const big=Object.keys(byY).sort((a,b)=>byY[b]-byY[a])[0];
+  let idx=big?F.findIndex(f=>f.hy===+big):F.length-1; if(idx<0)idx=F.length-1;
+  function show(i){idx=i;const f=F[i];rng.value=i;const im=$('#tmImg');if(f.img){im.hidden=false;im.src='assets/frames/f'+f.hy+'.jpg'}else im.hidden=true;
+    $('#tmCur').setAttribute('d',f.path);
+    $('#tmOld').setAttribute('d',AL.filter(a=>a.y<f.hy&&a.st!=='back').map(a=>a.path).join(''));
+    const cur=AL.filter(a=>a.y===f.hy).sort((a,b)=>b.ha-a.ha);$('#tmNew').setAttribute('d',cur.map(a=>a.path).join(''));
+    $('#tmYear').textContent=f.hy;$('#tmHa').textContent=num(f.ha)+' '+t('U');
+    $('#tmRain').textContent=rain[f.hy]!=null?Math.round(rain[f.hy]).toLocaleString('en-IN')+' mm':'—';$('#tmTag').textContent=nice(f.date)+' · '+(sens[f.sensor]||f.sensor);
+    $('#feed').innerHTML=`<h4>${t('feedH',{y:f.hy})}</h4>`+(cur.length?cur.slice(0,6).map(a=>`<div class="al"><b class="mono">${num(a.ha)} ${t('u')}</b><span>${hsName(hs(a.where))}</span><span class="ll">${a.lat.toFixed(4)}, ${a.lon.toFixed(4)}</span><span class="st ${a.st}">${t('st_'+a.st)}</span></div>`).join('')+(cur.length>6?`<div class="al muted">+ ${cur.length-6}</div>`:''):`<p class="muted">${t('feedNone')}</p>`);
+    drawChart()}
+  rng.oninput=()=>show(+rng.value);
+  let timer=null;const icon=$('#playIcon'),stop=()=>{clearInterval(timer);timer=null;icon.setAttribute('d','M4 2l10 6-10 6z')};
+  $('#play').onclick=()=>{if(timer)return stop();if(idx>=F.length-1)idx=-1;icon.setAttribute('d','M3 2h4v12H3zM9 2h4v12H9z');
+    timer=setInterval(()=>{if(idx>=F.length-1)return stop();show(idx+1)},800)};
+  const chart=$('#chart'),wrap=$('#chartWrap'),tip=$('#tip'),Y0=F[0].hy-.6,Y1=F[F.length-1].hy+.6;
+  const amax=Math.max(...F.map(f=>f.ha),A.full_ref)*K*1.12, rv=Object.values(rain), rmax=rv.length?Math.max(...rv)*1.05:1;
+  const tick=(()=>{const raw=amax/3.2,p=Math.pow(10,Math.floor(Math.log10(raw)));return [1,2,2.5,5,10].map(s=>s*p).find(s=>s>=raw)})();
+  function drawChart(){
+    const W=Math.max(300,wrap.clientWidth),H=W<520?250:290;chart.setAttribute('viewBox',`0 0 ${W} ${H}`);chart.setAttribute('height',H);chart.innerHTML='';
+    const m={l:38,r:8,t:22,b:22},rainH=hasRain?54:0,gap=hasRain?18:0,bh=H-m.t-m.b-rainH-gap;
+    const x=y=>m.l+(y-Y0)/(Y1-Y0)*(W-m.l-m.r),bw=Math.max(2,(W-m.l-m.r)/(Y1-Y0)*.68);
+    const yA=v=>m.t+bh-(v/amax)*bh,yR=v=>m.t+bh+gap+rainH-(v/rmax)*rainH;
+    for(let v=tick;v<amax;v+=tick){el('line',{x1:m.l,x2:W-m.r,y1:yA(v),y2:yA(v),class:'grid'},chart);el('text',{x:m.l-5,y:yA(v)+3.5,'text-anchor':'end'},chart).textContent=v}
+    el('line',{x1:x(M.ref[0]-.5),x2:W-m.r,y1:yA(A.full_ref*K),y2:yA(A.full_ref*K),class:'ref'},chart);
+    F.forEach((f,i)=>{const v=f.ha*K,r=el('rect',{x:x(f.hy)-bw/2,y:yA(v),width:bw,height:Math.max(0,yA(0)-yA(v)),class:'bar'+(i===idx?' sel':'')},chart);
+      r.addEventListener('click',()=>show(i));
+      if(byY[f.hy])el('circle',{cx:x(f.hy),cy:m.t-10,r:Math.max(2.2,Math.min(8,Math.sqrt(byY[f.hy]*K)*.75)),class:'adot'},chart)});
+    if(hasRain){const ry=Object.keys(rain).map(Number).filter(y=>y>=Y0&&y<=Y1).sort((a,b)=>a-b);
+      el('path',{d:'M'+ry.map(y=>x(y)+','+yR(rain[y])).join('L'),class:'rain'},chart);el('text',{x:m.l-5,y:yR(rmax)+6,'text-anchor':'end'},chart).textContent='mm'}
+    const f=F[idx];el('text',{x:x(f.hy),y:yA(f.ha*K)-6,'text-anchor':'middle',class:'ann'},chart).textContent=num(f.ha);
+    for(let y=Math.ceil(Y0/10)*10;y<=Y1;y+=10)el('text',{x:x(y),y:H-5,'text-anchor':'middle'},chart).textContent=y;
+    chart.onpointermove=e=>{const b=chart.getBoundingClientRect(),sx=(e.clientX-b.left)*(W/b.width),yr=Y0+(sx-m.l)/(W-m.l-m.r)*(Y1-Y0);
+      let best=null;F.forEach((g,i)=>{const d=Math.abs(g.hy-yr);if(d<0.9&&(!best||d<best.d))best={d,i}});
+      if(!best){tip.hidden=true;return}const g=F[best.i];tip.hidden=false;
+      tip.style.left=(x(g.hy)*b.width/W)+'px';tip.style.top=(yA(g.ha*K)*b.height/H)+'px';
+      tip.textContent=g.hy+' · '+num(g.ha)+' '+t('U')+(byY[g.hy]?' · ▲ '+num(byY[g.hy]):'')};
+    chart.onpointerleave=()=>tip.hidden=true;
+  }
+  new ResizeObserver(()=>drawChart()).observe(wrap);
+  const S=D.alertsum;
+  renders.push(()=>{$('#tmH').textContent=t('tmH',{y:M.first});$('#tmRainL').textContent=t('tmRainL',{m:months(M.rain_months)});
+    $('#lgPeak').textContent=t('lgPeak');$('#lgRain').textContent=t('lgRain',{m:months(M.rain_months)});$('#lgRef').textContent=t('lgRef');
+    show(idx);$('#score').innerHTML=S.n?t('score',{n:S.n,y:AL.length?Math.min(...AL.map(a=>a.y)):M.first,c:S.cnt.dry+S.cnt.farm,b:S.cnt.back}):''});
+  const pre=()=>F.forEach(f=>{if(f.img){const im=new Image();im.src='assets/frames/f'+f.hy+'.jpg'}});
+  ('requestIdleCallback' in window)?requestIdleCallback(pre):setTimeout(pre,1500);
+}
+
+function buildHotspots(){
+  const g=$('#hsGrid'),H=D.hotspots; if(!H.length){$('#where').hidden=true;return}
+  const cards=H.map((h,i)=>{
+    const a=document.createElement('article');a.className='hs';a.id='hs-'+h.key;
+    a.innerHTML=`<div class="hs-h"><span class="pin">${i+1}</span><h3></h3><div class="nums"></div></div><div class="photo"></div><div class="yrs"></div>
+      <div class="rec"><div class="cells" style="grid-template-columns:repeat(${M.last-M.first+1},1fr)"></div><div class="axis"><span>${M.first}</span><span>${M.last}</span></div><div class="say"></div></div>`;
+    g.appendChild(a);
+    const map=L.map(a.querySelector('.photo'),{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false,boxZoom:false,keyboard:false,zoomSnap:1,maxZoom:19});
+    map.fitBounds(h.bounds);const pick=addBase(map);
+    gj(D.layers.wettest,{color:cv('--img-lost2'),weight:1,fillOpacity:.12}).addTo(map);
+    gj(D.layers.never,{color:cv('--img-lost'),weight:1.4,fillOpacity:.2}).addTo(map);
+    gj(D.layers.full_ref,{color:cv('--img-ref'),weight:2,fill:false}).addTo(map);
+    const yb=a.querySelector('.yrs');let cur=defBase();
+    BASES.forEach(b=>{const c=document.createElement('button');c.className='chip';c.textContent=b.label;c.setAttribute('aria-pressed',b.key===cur);
+      c.onclick=()=>{cur=b.key;pick(cur);yb.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===c))};yb.appendChild(c)});
+    pick(cur);
+    const cells=a.querySelector('.cells');
+    for(let y=M.first;y<=M.last;y++){const c=document.createElement('i'),v=h.share[y];c.dataset.y=y;
+      if(v===undefined)c.className='na';else c.style.background=`color-mix(in srgb, var(--accent) ${Math.round(v*100)}%, var(--cell-empty))`;
+      if(y===M.ref[1]+1)c.classList.add('cut');cells.appendChild(c)}
+    return {a,h}});
+  renders.push(()=>{$('#kCut').textContent=t('kCut');cards.forEach(({a,h})=>{
+    a.querySelector('h3').textContent=hsName(h);
+    a.querySelector('.nums').innerHTML=t('hsNums',{l:num(h.lost),f:num(h.farmed),w:num(h.weeds)});
+    a.querySelector('.say').innerHTML=t('hsSay',{a:h.before[0],b:h.before[1],c:h.after[0],d:h.after[1],y:M.ref[1]});
+    a.querySelectorAll('.cells i').forEach(c=>{const v=h.share[c.dataset.y];c.title=c.dataset.y+': '+(v===undefined?t('cellNa'):t('cellV',{p:Math.round(v*100)}))})})});
+}
+
+function buildCompare(){
+  const C=D.compare,fa=D.frames.find(f=>f.hy===C.then.hy),fb=D.frames.find(f=>f.hy===C.now.hy);
+  if(!fa||!fb||!fa.img||!fb.img){$('#compare').hidden=true;return}
+  const host=$('#swPeak');host.style.aspectRatio=D.fw+'/'+D.fh;
+  host.innerHTML=`<img alt="" src="assets/frames/f${C.then.hy}.jpg"><div class="top"><img alt="" src="assets/frames/f${C.now.hy}.jpg"></div>
+    <svg viewBox="0 0 ${D.fw} ${D.fh}" preserveAspectRatio="none"><path class="oref" d="${D.ref_path}"/></svg>
+    <div class="bar-h"></div><div class="knob">⇆</div><span class="lab l">${C.then.hy}</span><span class="lab r">${C.now.hy}</span><input type="range" min="0" max="100" value="50" aria-label="Compare">`;
+  const top=host.querySelector('.top'),bar=host.querySelector('.bar-h'),knob=host.querySelector('.knob'),inp=host.querySelector('input');
+  const upd=()=>{const p=+inp.value;top.style.clipPath=`inset(0 0 0 ${p}%)`;bar.style.left=`calc(${p}% - 1px)`;knob.style.left=p+'%'};inp.oninput=upd;upd();
+  const para=C.then.rain!=null&&C.now.rain!=null&&C.now.rain>C.then.rain&&C.now.ha<0.93*C.then.ha;
+  renders.push(()=>{$('#cmH').textContent=t(para?'cm1':'cm2');
+    $('#versus').innerHTML=[C.then,C.now].map(c=>`<div><span class="yr">${c.hy}</span><b class="mono">${num(c.ha)}</b><span>${t('U')}${c.rain!=null?' · '+t('cmRain',{r:Math.round(c.rain).toLocaleString('en-IN'),m:months(M.rain_months)}):''}</span></div>`).join('');
+    $('#cmP').textContent=t(para?'cmP1':'cmP2',{a:C.then.hy,b:C.now.hy,d:num(C.then.ha-C.now.ha)})});
+}
+
+function buildTanks(){
+  const T=D.tanks; if(!T||T.length<3){$('#tanks').hidden=true;return}
+  const svg=$('#tankmap'),W=460,H=440,pad=16;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const kx=Math.cos(M.lat*Math.PI/180),R=M.neighbours_km/111.32;
+  const x=lo=>W/2+(lo-M.lon)*kx/R*(W/2-pad),y=la=>H/2-(la-M.lat)/R*(H/2-pad);
+  const cls=q=>q.b<0.9*q.a?'loss':q.b>1.1*q.a?'gain':'flat', rmax=Math.max(...T.map(q=>Math.max(q.a,q.b)));
+  let all=false;
+  const draw=()=>{svg.innerHTML='';
+    T.slice().sort((p,q)=>Math.max(q.a,q.b)-Math.max(p.a,p.b)).forEach(q=>{const c=el('circle',{cx:x(q.lon),cy:y(q.lat),r:Math.max(3,Math.sqrt(Math.max(q.a,q.b)/rmax)*26),class:cls(q)+(q.me?' me':'')},svg);
+      el('title',{},c).textContent=`${q.n||''} ${num(q.a)} → ${num(q.b)} ${t('U')}`});
+    const me=T.find(q=>q.me);if(me)el('text',{x:x(me.lon),y:y(me.lat)-30,class:'lbl','text-anchor':'middle'},svg).textContent=M.name;
+    [['loss','tkLoss'],['gain','tkGain'],['flat','tkFlat']].forEach(([c,k],i)=>{el('circle',{cx:pad+8,cy:H-pad-8-i*17,r:5,class:c},svg);el('text',{x:pad+19,y:H-pad-4-i*17},svg).textContent=t(k)});
+    const tot=T.reduce((s,q)=>[s[0]+q.a,s[1]+q.b],[0,0]);
+    $('#tkH').textContent=t('tkH',{k:M.neighbours_km});
+    $('#tkP').textContent=t('tkP',{n:T.length,a:num(tot[0]),b:num(tot[1]),s:T.filter(q=>cls(q)==='loss').length,g:T.filter(q=>cls(q)==='gain').length});
+    const rows=all?T:T.slice(0,8),mx=Math.max(...T.map(q=>Math.abs(q.b-q.a)),.1);
+    const nm=q=>q.me?esc(M.name):q.n?t('tkNear',{v:esc(q.n)}):q.lat.toFixed(4)+', '+q.lon.toFixed(4);
+    $('#tlist').innerHTML=rows.map(q=>{const d=q.b-q.a,w=Math.abs(d)/mx*50,c=cls(q);
+      return `<div class="trow ${q.me?'me':''}"><div class="nm">${nm(q)}<small>${num(q.a)} → ${num(q.b)} ${t('U')}</small></div><div class="dv"><i style="${d<0?`right:50%;width:${w}%`:`left:50%;width:${w}%`};background:var(${c==='loss'?'--img-lost':c==='gain'?'--gain':'--flat'})"></i></div><div class="ch">${d>0?'+':''}${num(d)}</div></div>`}).join('');
+    const b=$('#tMore');b.hidden=T.length<=8;b.textContent=all?t('tkLess'):t('tkMore',{n:T.length});b.onclick=()=>{all=!all;draw()}};
+  renders.push(draw);
+}
+
+function buildMethod(){
+  const mo=a=>a.map(m=>MON.en[m-1]).join(', '), n=M.notes||[];
+  const blocks=[['How water is measured',[
+    `Water = Landsat pixels (30 m) with MNDWI &gt; 0 that are joined to the lake. ${M.n_scenes} usable scenes, ${M.first}–${M.generated.slice(0,4)}. 1 hectare = 2.471 acres.`,
+    `Each year uses the fullest clear image from these months: ${mo(M.peak_months)}. Other months are left out because flooded fields can look like lake water.`,
+    `"Full lake, ${refL}": under water at peak in at least half of the first ${M.ref_n} years on record. "Fills most years now": at least half of ${nowL}.`,
+    `"No longer fills" = inside the ${refL} shoreline but outside today's. It is split into ground never flooded in ${nowL} and ground flooded only in some of those years.`]],
+   ['What is on the lakebed now',[
+    `Sentinel-2 (${M.s2_res} m), years ${M.cover_years.length?M.cover_years[0]+'–'+M.cover_years[M.cover_years.length-1]:'n/a'}. "Farmed" = the ground turns green (NDVI ≥ 0.55) and is later bare or harvested (NDVI ≤ 0.30 in ${mo(M.dry_months)}) in at least ${M.cover_need} of those years.`,
+    `"Farmed" can include natural plants on drying mud. Treat it as an upper bound and check it against the photos.`,
+    `"Weeds" = ground that turns green and never goes bare.`]],
+   ['Alerts',[
+    `Replay rule: ground inside the ${refL} shoreline that stays dry at peak for three observed years in a row raises one alert. Patches under 0.4 ha (1 acre) are dropped.`,
+    `Outcome today: "farmed" shows the crop cycle above; "still dry" has not flooded in ${nowL}; otherwise the water came back.`,
+    `The rule over-alerts in a run of dry years. A live system should weigh rainfall and send only farmed or bunded ground.`,
+    `"To watch" = dry in the latest clear image but under water within 25 days of this date in each recent year.`,
+    `Radar: Sentinel-1 VV. It reads lower than optical because weed-covered water looks like land.`]],
+   ['Limits',[
+    `This shows change, not illegality. The legal boundary is the notified Full Tank Level (or local equivalent) and the survey records. Check on the ground before acting.`,
+    `The record starts in ${M.first}. A lake that shrank before then will look unchanged.`,
+    `Month settings are tuned for monsoon-fed tanks in peninsular India. For other climates, change the peak, dry and rain months.`,
+    `Neighbour scan: water in at least half of a year's peak-season images, in 60% of years. It is stricter than the lake study, so this lake's own numbers differ a little there. Bodies cut by the scan edge and narrow channels are left out. Names are the nearest OpenStreetMap village.`
+    ].concat(n.includes('clipped')?['The lake is larger than the search window, so part of it is missing. Re-run with a larger search distance.']:[])],
+   ['Sources',[
+    `USGS Landsat 4–9, ESA Sentinel-1 and Sentinel-2, via <a href="https://planetarycomputer.microsoft.com" target="_blank" rel="noopener">Microsoft Planetary Computer</a>`,
+    `<a href="https://global-surface-water.appspot.com" target="_blank" rel="noopener">JRC Global Surface Water</a> (to find the lake at the chosen point)`,
+    `<a href="https://power.larc.nasa.gov" target="_blank" rel="noopener">NASA POWER</a> rainfall (about 50 km grid)`,
+    `<a href="https://livingatlas.arcgis.com/wayback/" target="_blank" rel="noopener">Esri World Imagery Wayback</a> photos, loaded live from Esri`]]];
+  $('#meth').innerHTML=blocks.map(([h,li])=>`<div><h5>${h}</h5><ul>${li.map(x=>'<li>'+x+'</li>').join('')}</ul></div>`).join('');
+}
+
+buildTop();buildMap();buildBulletin();buildTM();buildHotspots();buildCompare();buildTanks();buildMethod();applyLang();
+})();
+</script>
+</body>
+</html>

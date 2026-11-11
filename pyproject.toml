@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lakewatch"
+version = "0.1.0"
+description = "Satellite encroachment report for any lake or tank: point in, interactive report out."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "scikit-image>=0.21",
+  "rasterio>=1.3",
+  "pyproj>=3.5",
+  "pillow>=10",
+  "pystac-client>=0.7",
+  "planetary-computer>=1.0",
+  "mercantile>=1.2",
+  "flask>=3.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+lakewatch = "lakewatch.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["lakewatch*"]
+
+[tool.setuptools.package-data]
+lakewatch = ["template/*.html", "template/vendor/*"]

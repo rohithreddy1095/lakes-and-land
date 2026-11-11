@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lakes & Land · pick a lake</title>
+<link rel="stylesheet" href="vendor/leaflet.css">
+<style>
+:root{--bg:#0d1416;--surface:#141d20;--surface-2:#1b262a;--fg:#e4ecea;--muted:#90a4a1;--line:#283639;--accent:#4fc8e8;--accent-ink:#06222b;--bad:#ff6b4f;color-scheme:dark}
+@media (prefers-color-scheme: light){:root{--bg:#eef2f0;--surface:#fff;--surface-2:#e3eae7;--fg:#132120;--muted:#55696a;--line:#cfd9d6;--accent:#0b7d9e;--accent-ink:#fff;--bad:#c23b22;color-scheme:light}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;display:grid;grid-template-columns:minmax(0,1fr) 380px;height:100vh}
+#map{height:100vh;background:var(--surface-2)}
+aside{padding:20px;overflow:auto;display:grid;gap:16px;align-content:start;border-left:1px solid var(--line);background:var(--surface)}
+h1{margin:0;font-size:22px;line-height:1.2}
+p{margin:0;color:var(--muted)}
+label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+input[type=text],input[type=search],select{width:100%;padding:9px 10px;border-radius:5px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit}
+.rowf{display:flex;gap:8px}
+.rowf>*{flex:1;min-width:0}
+button{appearance:none;border:1px solid var(--line);background:var(--surface-2);color:var(--fg);border-radius:5px;padding:9px 12px;font:600 14px/1 inherit;cursor:pointer}
+button.go{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);padding:12px}
+button:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.check{display:flex;gap:8px;align-items:center;color:var(--fg);font-size:14px}
+details{border:1px solid var(--line);border-radius:5px;padding:8px 10px}
+summary{cursor:pointer;font-size:13px;color:var(--muted)}
+details .grid{display:grid;gap:10px;margin-top:10px}
+.bar{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s}
+#status{display:grid;gap:8px}
+#msg{font-size:14px;color:var(--fg);min-height:1.5em}
+#msg.bad{color:var(--bad)}
+.list{display:grid;gap:6px}
+.list a{color:var(--accent);text-decoration:none;font-size:14px}
+.list a:hover{text-decoration:underline}
+.pt{font:12.5px ui-monospace,monospace;color:var(--muted)}
+h2{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+@media (max-width:800px){body{grid-template-columns:1fr;grid-template-rows:55vh auto;height:auto}#map{height:55vh}aside{border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<div id="map" role="region" aria-label="Map: click a lake"></div>
+<aside>
+  <div><h1>Pick a lake</h1><p>Click on the open water of any lake, tank or reservoir. The analysis reads about 40 years of satellite images and takes 10 to 30 minutes.</p></div>
+  <form id="find" class="rowf"><input type="search" id="q" placeholder="Search a place, or paste lat, lon" aria-label="Search"><button style="flex:none">Find</button></form>
+  <label>Lake name<input type="text" id="name" placeholder="e.g. Yathavakilla Cheruvu" maxlength="80"></label>
+  <div class="pt" id="pt">No point chosen yet.</div>
+  <div class="rowf">
+    <label>Units<select id="units"><option value="acres">Acres</option><option value="ha">Hectares</option></select></label>
+    <label>Neighbour scan<select id="nb"><option value="15">15 km</option><option value="8">8 km</option><option value="0">Off (faster)</option></select></label>
+  </div>
+  <details><summary>Season settings (defaults suit monsoon India)</summary><div class="grid">
+    <label>Peak-water months<input type="text" id="peak" value="9,10,11,2,3"></label>
+    <label>Dry months, when harvested fields are bare<input type="text" id="dry" value="3,4,5,6"></label>
+    <label>Rainy months<input type="text" id="rain" value="6,7,8,9,10"></label>
+    <label>First month of the water year<input type="text" id="ys" value="7"></label>
+  </div></details>
+  <button class="go" id="go" disabled>Analyse this lake</button>
+  <div id="status" hidden><div class="bar"><i id="prog"></i></div><div id="msg"></div></div>
+  <div><h2>Reports</h2><div class="list" id="reports"><p>None yet.</p></div></div>
+</aside>
+<script src="vendor/leaflet.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const map=L.map('map').setView([17.4,79.2],7);
+const img=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Imagery © Esri, Maxar'}).addTo(map);
+const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'});
+L.control.layers({'Satellite':img,'Street map':osm}).addTo(map);
+let pt=null,mk=null;
+function setPt(lat,lon){pt={lat,lon};if(mk)mk.setLatLng([lat,lon]);else mk=L.circleMarker([lat,lon],{radius:8,color:'#fff',weight:2,fillColor:'#4fc8e8',fillOpacity:1}).addTo(map);
+  $('#pt').textContent=lat.toFixed(5)+', '+lon.toFixed(5);$('#go').disabled=false}
+map.on('click',e=>setPt(e.latlng.lat,e.latlng.lng));
+$('#find').onsubmit=async e=>{e.preventDefault();const q=$('#q').value.trim();if(!q)return;
+  const m=q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if(m){const la=+m[1],lo=+m[2];map.setView([la,lo],14);setPt(la,lo);return}
+  try{const r=await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q))).json();
+    if(r[0]){map.setView([+r[0].lat,+r[0].lon],13);if(!$('#name').value)$('#name').value=r[0].display_name.split(',')[0]}else say('Place not found. Try another name or paste coordinates.',true)}
+  catch(err){say('Search is unavailable. Paste coordinates instead.',true)}};
+const nums=id=>$(id).value.split(',').map(s=>parseInt(s,10)).filter(n=>n>=1&&n<=12);
+function say(t,bad){$('#status').hidden=false;const m=$('#msg');m.textContent=t;m.className=bad?'bad':''}
+$('#go').onclick=async()=>{if(!pt)return;$('#go').disabled=true;$('#prog').style.width='0';say('Starting');
+  const body={lat:pt.lat,lon:pt.lon,name:$('#name').value,units:$('#units').value,neighbours_km:+$('#nb').value,peak_months:nums('#peak'),dry_months:nums('#dry'),rain_months:nums('#rain'),year_start:nums('#ys')[0]||7};
+  let id;try{const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||'Could not start');id=j.id}
+  catch(err){say(err.message,true);$('#go').disabled=false;return}
+  const poll=async()=>{let j;try{j=await (await fetch('/api/jobs/'+id)).json()}catch(e){setTimeout(poll,3000);return}
+    $('#prog').style.width=Math.round((j.progress||0)*100)+'%';
+    if(j.state==='done'){say('Done. Opening the report.');loadReports();window.open(j.report,'_blank');$('#go').disabled=false;return}
+    if(j.state==='failed'){say(j.msg,true);$('#go').disabled=false;return}
+    say(j.msg);setTimeout(poll,2000)};poll()};
+async function loadReports(){try{const r=await (await fetch('/api/reports')).json();if(!r.length)return;
+  const box=$('#reports');box.innerHTML='';r.forEach(x=>{const a=document.createElement('a');a.href=x.url;a.target='_blank';a.textContent=x.name+' · '+x.generated;box.appendChild(a)})}catch(e){}}
+loadReports();
+</script>
+</body>
+</html>
